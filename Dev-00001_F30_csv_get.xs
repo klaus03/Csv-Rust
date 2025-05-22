@@ -135,9 +135,10 @@ line_csv(char pt_sep, AV* fields)
 
         size_t alen = av_len(fields) + 1;
 
-        sli_t* SLI = (sli_t*)malloc(sizeof(sli_t*) * alen);
+        sli_t* SLI = (sli_t*)malloc(sizeof(sli_t) * alen);
 
         if (SLI == NULL) {
+            free(rs_str);
             croak("ABORT-0050: line_csv() -- Can't malloc(%d) -- sizeof(SV*) = %d", alen, sizeof(SV*));
         }
 
@@ -208,6 +209,7 @@ line_csv(char pt_sep, AV* fields)
                 rs_str = malloc(rs_cap + 1); // +1 for the null-terminator
 
                 if (rs_str == NULL) {
+                    free(ol_str);
                     croak("ABORT-0060: line_csv() -- Can't malloc(%d)", rs_cap + 1);
                 }
 
