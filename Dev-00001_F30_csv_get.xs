@@ -139,7 +139,7 @@ line_csv(char pt_sep, AV* fields)
 
         if (SLI == NULL) {
             free(rs_str);
-            croak("ABORT-0050: line_csv() -- Can't malloc(%d) -- sizeof(SV*) = %d", alen, sizeof(SV*));
+            croak("ABORT-0050: line_csv() -- Can't malloc(%d) -- sizeof(sli_t) = %d", alen, sizeof(sli_t));
         }
 
         int gl_iso = 0;
