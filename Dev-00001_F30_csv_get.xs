@@ -210,6 +210,7 @@ line_csv(char pt_sep, AV* fields)
 
                 if (rs_str == NULL) {
                     free(ol_str);
+                    free(SLI);
                     croak("ABORT-0060: line_csv() -- Can't malloc(%d)", rs_cap + 1);
                 }
 
