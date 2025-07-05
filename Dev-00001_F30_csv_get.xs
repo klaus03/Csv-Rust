@@ -231,7 +231,6 @@ line_csv(char pt_sep, AV* fields)
         }
 
         RETVAL = nsv;
-        sv_2mortal((SV*)RETVAL);
 
         free(rs_str);
         free(SLI);
