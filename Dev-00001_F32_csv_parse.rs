@@ -21,6 +21,14 @@ pub struct MyLst {
 }
 
 #[derive(Debug)]
+enum Errcd {
+    Zstop,
+    Zbreak,
+    Lquote,
+    Quona,
+}
+
+#[derive(Debug)]
 enum Stat {
     Ready,
     Empty,
@@ -29,7 +37,7 @@ enum Stat {
     SkipQuote,
     EndQuote,
     Stop,
-    Croak(u8),
+    Croak(Errcd),
 }
 
 #[no_mangle]
@@ -116,7 +124,7 @@ pub extern "C" fn get_mlst(len: i32, line: *const u8, sep: u8) -> MyLst {
         ps_status = match ps_status {
             Stat::Croak(_)  => break 'outer,
             Stat::SkipQuote => Stat::GoQuote,
-            Stat::Stop      => Stat::Croak(1),
+            Stat::Stop      => Stat::Croak(Errcd::Zstop),
             Stat::EndQuote  => {
                 match ch_cur {
                     STR_CRLF => Stat::Stop,
@@ -133,7 +141,7 @@ pub extern "C" fn get_mlst(len: i32, line: *const u8, sep: u8) -> MyLst {
 
                     match op_nxt {
                         Some(STR_CRLF) => Stat::Empty,
-                        None           => Stat::Croak(5),
+                        None           => Stat::Croak(Errcd::Zbreak),
                         _              => Stat::Ready,
                     }
                 }
@@ -152,7 +160,7 @@ pub extern "C" fn get_mlst(len: i32, line: *const u8, sep: u8) -> MyLst {
                 }
                 else {
                     match ch_cur {
-                        STR_QUOT => Stat::Croak(2),
+                        STR_QUOT => Stat::Croak(Errcd::Lquote),
                         STR_CRLF => { ps_bounds.push((ps_left, i)); Stat::Stop },
                         _        => Stat::GoNormal,
                     }
@@ -171,7 +179,7 @@ pub extern "C" fn get_mlst(len: i32, line: *const u8, sep: u8) -> MyLst {
                                     Stat::EndQuote
                                 }
                                 else {
-                                    Stat::Croak(3)
+                                    Stat::Croak(Errcd::Quona)
                                 }
                             },
                             None => Stat::Stop,
@@ -188,16 +196,17 @@ pub extern "C" fn get_mlst(len: i32, line: *const u8, sep: u8) -> MyLst {
     }
 
     let stno: u16 = match ps_status {
-        Stat::Stop       => 0,
-        Stat::GoNormal   => 0,
-        Stat::Empty      => 0,
-        Stat::Ready      => ECD_EOF,
-        Stat::GoQuote    => ECD_QNTERM,
-        Stat::SkipQuote  => 8001,
-        Stat::EndQuote   => 8002,
-        Stat::Croak(2)   => ECD_LQUOTE,
-        Stat::Croak(3)   => ECD_QUONA,
-        Stat::Croak(cno) => 9000 + (cno as u16),
+        Stat::Stop                 => 0,
+        Stat::GoNormal             => 0,
+        Stat::Empty                => 0,
+        Stat::Ready                => ECD_EOF,
+        Stat::GoQuote              => ECD_QNTERM,
+        Stat::SkipQuote            => 8001,
+        Stat::EndQuote             => 8002,
+        Stat::Croak(Errcd::Lquote) => ECD_LQUOTE,
+        Stat::Croak(Errcd::Quona)  => ECD_QUONA,
+        Stat::Croak(Errcd::Zstop)  => 9001,
+        Stat::Croak(Errcd::Zbreak) => 9002,
     };
 
     if stno != 0 {
