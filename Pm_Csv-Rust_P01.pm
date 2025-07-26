@@ -17,7 +17,7 @@ Csv::Rust - A *.csv parser written in Rust
 
 =head1 AUTHOR
 
-Klaus Eichner <klaus03@gmail.com>
+Klaus Eichner <klaus03@gmail.com>, 26-JULY-2025
 
 =head1 COPYLEFT
 
