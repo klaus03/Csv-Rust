@@ -23,6 +23,11 @@ no warnings qw(once);
 
 package Acme::XSLoad;
 
+# *********************************************************************************
+# Acme::XSLoad - Shamelessly stolen from XSLoader which was originally
+# written by Ilya Zakharevich
+# *********************************************************************************
+
 if (defined(&DynaLoader::boot_DynaLoader) and !defined(&DynaLoader::dl_error)) {
     DynaLoader::boot_DynaLoader('DynaLoader');
 }
@@ -97,23 +102,3 @@ sub load_dll {
 }
 
 1;
-
-__END__
-
-=head1 NAME
-
-Acme::XSLoad - Shamelessly stolen from XSLoader which was originally
-written by Ilya Zakharevich
-
-=head1 SYNOPSIS
-
-    use Acme::XSLoad;
-
-=head1 AUTHOR
-
-Klaus Eichner <klaus03@gmail.com>, 26-JULY-2025
-
-Shamelessly stolen from XSLoader which was originally
-written by Ilya Zakharevich
-
-=cut
