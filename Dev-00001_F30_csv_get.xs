@@ -103,37 +103,6 @@ split_csv(char pt_sep, SV* scalar)
     OUTPUT:
         RETVAL
 
-void
-print_csv(PerlIO* stream, char pt_sep, AV* fields)
-    CODE:
-        if (pt_sep < 1 || pt_sep > 127) {
-            croak("ABORT-0020: print_csv(sep = %d) is not in range ASCII 1 .. 127", pt_sep);
-        }
-
-        size_t alen = av_len(fields) + 1;
-
-        for (size_t i = 0; i < alen; i++) {
-            SV**  mfetch = av_fetch(fields, i, 0);
-            SV*   scalar = mfetch ? *mfetch : NULL;
-            char* pt_str;
-            int   pt_len;
-
-            if (scalar && SvOK(scalar)) {
-                pt_str = SvPVutf8_nolen(scalar);
-                pt_len = SvCUR(scalar);
-            }
-            else {
-                pt_str = "";
-                pt_len = 0;
-            }
-
-            mtxt_t my_txt = get_mtxt(pt_len, pt_str, pt_sep, (i + 1 == alen ? 1 : 0));
-            PerlIO_puts(stream, my_txt.dat);
-            rel_mtxt(my_txt);
-        }
-
-        PerlIO_puts(stream, "\n");
-
 SV*
 line_csv(char pt_sep, AV* fields)
     CODE:
