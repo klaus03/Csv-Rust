@@ -188,32 +188,77 @@ line_csv(char pt_sep, AV* fields)
         for (size_t i = 0; i < alen; i++) {
             SV* scalar = SLI[i].dat;
 
+            char  pt_real;
             char  pt_type;
             char* pt_str;
             int   pt_len;
 
             if (scalar) {
-                if (SvUTF8(scalar)) {
-                    pt_type = 'U';
-                }
-                else {
+                if (SvROK(scalar)) { // It's a reference of some kind
+                    svtype st = SvTYPE(SvRV(scalar)); // dereference
+
+                    if (st == SVt_PVAV) {
+                        pt_real = 'A'; // It's an array reference
+                        pt_str  = "#Array";
+                    }
+                    else if (st == SVt_PVHV) {
+                        pt_real = 'H'; // It's a hash reference
+                        pt_str  = "#Hash";
+                    }
+                    else if (st == SVt_PVCV) {
+                        pt_real = 'C'; // It's a code reference
+                        pt_str  = "#Code";
+                    }
+                    else {
+                        pt_real = 'G'; // Some other kind of reference (glob, regex, etc.)
+                        pt_str  = "#Glob";
+                    }
+
                     pt_type = 'I';
-                }
-
-                if (gl_utf) {
-                    pt_str = SvPVutf8_nolen(scalar); // see also sv_utf8_upgrade(sv)
+                    pt_len  = strlen(pt_str);
                 }
                 else {
-                    pt_str = SvPV_nolen(scalar);
-                }
+                    if (SvIOK(scalar)) {
+                        pt_real = 'I'; // Integer value
+                    }
+                    else if (SvNOK(scalar)) {
+                        pt_real = 'D'; // Double value
+                    }
+                    else if (SvPOK(scalar)) {
+                        pt_real = 'S'; // String value
+                    }
+                    else if (!SvOK(scalar)) {
+                        pt_real = 'U'; // undef
+                    }
+                    else {
+                        pt_real = 'Z'; // unknown...
+                    }
 
-                pt_len = SvCUR(scalar);
+                    if (SvUTF8(scalar)) {
+                        pt_type = 'U';
+                    }
+                    else {
+                        pt_type = 'I';
+                    }
+
+                    if (gl_utf) {
+                        pt_str = SvPVutf8_nolen(scalar); // see also sv_utf8_upgrade(sv)
+                    }
+                    else {
+                        pt_str = SvPV_nolen(scalar);
+                    }
+
+                    pt_len = SvCUR(scalar);
+                }
             }
             else {
+                pt_real = 'N';
                 pt_type = 'N';
-                pt_str  = "";
-                pt_len  = 0;
+                pt_str  = "#NA";
+                pt_len  = strlen(pt_str);
             }
+
+            //~ printf("D090: i = %d -- get_mtxt(pt_len=%d, pt_real='%c', pt_str='%s', pt_sep='%c', alen=%d);\n", i, pt_len, pt_real, pt_str, pt_sep, alen);
 
             mtxt_t my_txt = get_mtxt(pt_len, pt_str, pt_sep, (i + 1 == alen ? 1 : 0));
 
