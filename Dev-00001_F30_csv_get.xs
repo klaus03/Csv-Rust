@@ -1,21 +1,3 @@
-// *********************************************************************************
-// Csv::Rust - A *.csv parser written in Rust
-// AUTHOR    - Klaus Eichner <klaus03@gmail.com>
-// DATE      - 26-JULY-2025
-//
-// COPYLEFT
-//
-// This is free software, you can copy, distribute, and modify it under the
-// terms of the Free Art License https://artlibre.org/licence/lal/en/
-//
-// Dieses Werk ist frei, Sie sind berechtigt, es in Einhaltung der
-// Bestimmungen der Lizenz Freie Kunst https://artlibre.org/licence/lal/de1-3/ zu
-// kopieren, zu verbreiten und zu aendern.
-//
-// Cette oeuvre est libre, vous pouvez la copier, la diffuser et la modifier
-// selon les termes de la Licence Art Libre https://artlibre.org/
-// *********************************************************************************
-
 HEAD_BEGIN:
     typedef struct {
         int   len;
@@ -32,13 +14,24 @@ HEAD_BEGIN:
         SV* dat;
     } sli_t;
 
+    typedef struct {
+        char  type;
+        char  uses_ref;
+        char  uses_utf8;
+        char* mstr;
+        int   mlen;
+    } ginf_t;
+
     #define TCAP 512
+    #define RLEN 20
 
     extern mtxt_t get_mtxt(int, char*, char, char);
     extern mlst_t get_mlst(int, char*, char);
 
-    extern void  rel_mtxt(mtxt_t);
-    extern void  rel_mlst(mlst_t);
+    extern void rel_mtxt(mtxt_t);
+    extern void rel_mlst(mlst_t);
+
+    static char* make_text(char*, char*, char mt_char);
 HEAD_END:
 
 AV*
@@ -48,55 +41,28 @@ split_csv(char pt_sep, SV* scalar)
             croak("ABORT-0010: split_csv(sep = %d) is not in range ASCII 1 .. 127", pt_sep);
         }
 
-        char  pt_type;
-        char* pt_str;
-        int   pt_len;
+        char my_buffer[RLEN];
 
-        if (scalar && SvOK(scalar)) {
-            if (SvUTF8(scalar)) {
-                pt_type = 'U';
+        ginf_t my_info = get_info(aTHX_ scalar, (char*)&my_buffer);
+        mlst_t my_lst  = get_mlst(my_info.mlen, my_info.mstr, pt_sep);
 
-                pt_str = SvPVutf8_nolen(scalar); // see also sv_utf8_upgrade(sv)
-            }
-            else {
-                pt_type = 'I';
-
-                pt_str = SvPV_nolen(scalar);
-            }
-
-            // https://perldoc.perl.org/perlguts
-            // You can get [...] the current length of the string stored in an SV with the following macros:
-            // STRLEN name_length = SvCUR(cv); /* in bytes */
-
-            pt_len = SvCUR(scalar);
-        }
-        else {
-            pt_type = 'N';
-            pt_str  = "";
-            pt_len  = 0;
-        }
-
-        AV* cli = newAV();
-
-        mlst_t my_lst = get_mlst(pt_len, pt_str, pt_sep);
+        AV* my_AV = newAV();
 
         for (size_t i = 0; i < my_lst.len; i++) {
             mtxt_t my_txt = my_lst.dat[i];
+            SV*    my_SV  = newSVpv(my_txt.dat, my_txt.len);
 
-            SV* nsv = newSVpv(my_txt.dat, my_txt.len);
-
-            if (pt_type == 'U') {
-                SvUTF8_on(nsv);
+            if (my_info.uses_utf8) {
+                SvUTF8_on(my_SV);
             }
 
-            av_push(cli, nsv);
+            av_push(my_AV, my_SV);
         }
 
-        RETVAL = newAV();
-        sv_2mortal((SV*)RETVAL);
+        RETVAL = newAV(); sv_2mortal((SV*)RETVAL);
  
         av_push(RETVAL, newSViv((int)my_lst.eno));
-        av_push(RETVAL, newRV_inc((SV*)cli));
+        av_push(RETVAL, newRV_inc((SV*)my_AV));
 
         rel_mlst(my_lst);
 
@@ -120,116 +86,34 @@ line_csv(char pt_sep, AV* fields)
 
         strcpy(rs_str, "");
 
-        size_t alen = av_len(fields) + 1;
+        size_t sl_len = av_len(fields) + 1;
+        sli_t* sl_arr = (sli_t*)malloc(sizeof(sli_t) * sl_len);
 
-        sli_t* SLI = (sli_t*)malloc(sizeof(sli_t) * alen);
-
-        if (SLI == NULL) {
+        if (sl_arr == NULL) {
             free(rs_str);
-            croak("ABORT-0050: line_csv() -- Can't malloc(%d) -- sizeof(sli_t) = %d", alen, sizeof(sli_t));
+            croak("ABORT-0050: line_csv() -- Can't malloc(%d) -- sizeof(sli_t) = %d", sl_len, sizeof(sli_t));
         }
 
-        int gl_iso = 0;
-        int gl_utf = 0;
-        int gl_non = 0;
+        int sl_utf8 = 0;
 
-        for (size_t i = 0; i < alen; i++) {
+        for (size_t i = 0; i < sl_len; i++) {
             SV** mfetch = av_fetch(fields, i, 0);
             SV*  scalar = mfetch ? *mfetch : NULL;
 
-            if (scalar && SvOK(scalar)) {
-                SLI[i].dat = scalar;
+            sl_arr[i].dat = scalar;
 
-                if (SvUTF8(scalar)) {
-                    gl_utf++;
-                }
-                else {
-                    gl_iso++;
-                }
-            }
-            else {
-                SLI[i].dat = NULL;
-
-                gl_non++;
+            if (var_utf8(aTHX_ scalar)) {
+                sl_utf8++;
             }
         }
 
-        for (size_t i = 0; i < alen; i++) {
-            SV* scalar = SLI[i].dat;
+        for (size_t i = 0; i < sl_len; i++) {
+            SV* scalar = sl_arr[i].dat;
 
-            char  pt_real;
-            char  pt_type;
-            char* pt_str;
-            int   pt_len;
+            char my_buffer[RLEN];
 
-            if (scalar) {
-                if (SvROK(scalar)) { // It's a reference of some kind
-                    svtype st = SvTYPE(SvRV(scalar)); // dereference
-
-                    if (st == SVt_PVAV) {
-                        pt_real = 'A'; // It's an array reference
-                        pt_str  = "#Array";
-                    }
-                    else if (st == SVt_PVHV) {
-                        pt_real = 'H'; // It's a hash reference
-                        pt_str  = "#Hash";
-                    }
-                    else if (st == SVt_PVCV) {
-                        pt_real = 'C'; // It's a code reference
-                        pt_str  = "#Code";
-                    }
-                    else {
-                        pt_real = 'G'; // Some other kind of reference (glob, regex, etc.)
-                        pt_str  = "#Glob";
-                    }
-
-                    pt_type = 'I';
-                    pt_len  = strlen(pt_str);
-                }
-                else {
-                    if (SvIOK(scalar)) {
-                        pt_real = 'I'; // Integer value
-                    }
-                    else if (SvNOK(scalar)) {
-                        pt_real = 'D'; // Double value
-                    }
-                    else if (SvPOK(scalar)) {
-                        pt_real = 'S'; // String value
-                    }
-                    else if (!SvOK(scalar)) {
-                        pt_real = 'U'; // undef
-                    }
-                    else {
-                        pt_real = 'Z'; // unknown...
-                    }
-
-                    if (SvUTF8(scalar)) {
-                        pt_type = 'U';
-                    }
-                    else {
-                        pt_type = 'I';
-                    }
-
-                    if (gl_utf) {
-                        pt_str = SvPVutf8_nolen(scalar); // see also sv_utf8_upgrade(sv)
-                    }
-                    else {
-                        pt_str = SvPV_nolen(scalar);
-                    }
-
-                    pt_len = SvCUR(scalar);
-                }
-            }
-            else {
-                pt_real = 'N';
-                pt_type = 'N';
-                pt_str  = "#NA";
-                pt_len  = strlen(pt_str);
-            }
-
-            //~ printf("D090: i = %d -- get_mtxt(pt_len=%d, pt_real='%c', pt_str='%s', pt_sep='%c', alen=%d);\n", i, pt_len, pt_real, pt_str, pt_sep, alen);
-
-            mtxt_t my_txt = get_mtxt(pt_len, pt_str, pt_sep, (i + 1 == alen ? 1 : 0));
+            ginf_t my_info = get_info(aTHX_ scalar, (char*)&my_buffer);
+            mtxt_t my_txt  = get_mtxt(my_info.mlen, my_info.mstr, pt_sep, (i + 1 == sl_len ? 1 : 0));
 
             char*  nw_str = my_txt.dat;
             size_t nw_len = my_txt.len;
@@ -242,7 +126,9 @@ line_csv(char pt_sep, AV* fields)
 
                 if (rs_str == NULL) {
                     free(ol_str);
-                    free(SLI);
+                    free(sl_arr);
+                    rel_mtxt(my_txt);
+
                     croak("ABORT-0060: line_csv() -- Can't malloc(%d)", rs_cap + 1);
                 }
 
@@ -256,16 +142,125 @@ line_csv(char pt_sep, AV* fields)
             rel_mtxt(my_txt);
         }
 
-        SV* nsv = newSVpv(rs_str, rs_len);
+        RETVAL = newSVpv(rs_str, rs_len);
 
-        if (gl_utf) {
-            SvUTF8_on(nsv);
+        if (sl_utf8) {
+            SvUTF8_on(RETVAL);
         }
 
-        RETVAL = nsv;
-
         free(rs_str);
-        free(SLI);
+        free(sl_arr);
 
     OUTPUT:
         RETVAL
+
+HEAD_BEGIN:
+    static char var_utf8(pTHX_ SV* gu_scalar) {
+        if (!gu_scalar) {
+            return 0;
+        }
+
+        if (SvROK(gu_scalar)) { // It's a reference of some kind
+            return 0;
+        }
+
+        if (SvPOK(gu_scalar) && SvUTF8(gu_scalar)) {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    static ginf_t get_info(pTHX_ SV* gi_scalar, char* gi_buffer) {
+        ginf_t gi_result = { '-', 0, 0, "", 0 };
+
+        if (!gi_scalar) {
+            return gi_result;
+        }
+
+        if (SvROK(gi_scalar)) { // It's a reference of some kind
+            gi_result.uses_ref = 1;
+
+            svtype gt_deref = SvTYPE(SvRV(gi_scalar)); // dereference
+
+            if (gt_deref == SVt_PVAV) { // It's an array reference
+                gi_result.type = 'A';
+            }
+            else if (gt_deref == SVt_PVHV) { // It's a hash reference
+                gi_result.type = 'H';
+            }
+            else if (gt_deref == SVt_PVCV) { // It's a code reference
+                gi_result.type = 'C';
+            }
+            else { // Some other kind of reference (glob, regex, etc.)
+                gi_result.type = 'G';
+            }
+
+            gi_result.mstr = make_text(gi_buffer, "#Ref(_)", gi_result.type);
+            gi_result.mlen = strlen(gi_result.mstr);
+        }
+        else {
+            char no_svpv = 0;
+
+            if (SvIOK(gi_scalar)) { // Integer value
+                gi_result.type = 'I';
+            }
+            else if (SvNOK(gi_scalar)) { // Double value
+                gi_result.type = 'D';
+            }
+            else if (SvPOK(gi_scalar)) { // String value
+                gi_result.type = 'S';
+
+                if (SvUTF8(gi_scalar)) {
+                    gi_result.uses_utf8 = 1;
+                }
+            }
+            else if (!SvOK(gi_scalar)) { // undef
+                gi_result.type = 'U';
+                no_svpv = 1;
+            }
+            else { // unknown...
+                gi_result.type = 'Z';
+                no_svpv = 1;
+            }
+
+            if (no_svpv) {
+                gi_result.mstr = make_text(gi_buffer, "#Nul(_)", gi_result.type);
+                gi_result.mlen = strlen(gi_result.mstr);
+            }
+            else {
+                if (gi_result.uses_utf8) {
+                    gi_result.mstr = SvPVutf8_nolen(gi_scalar); // see also sv_utf8_upgrade(sv)
+                }
+                else {
+                    gi_result.mstr = SvPV_nolen(gi_scalar);
+                }
+
+                // https://perldoc.perl.org/perlguts
+                // You can get [...] the current length of the string stored in an SV with the following macros:
+                // STRLEN name_length = SvCUR(cv); /* in bytes */
+
+                gi_result.mlen = SvCUR(gi_scalar);
+            }
+        }
+
+        return gi_result;
+    }
+
+    static char* make_text(char* mt_buffer, char* mt_template, char mt_char) {
+        int mt_len = strlen(mt_template);
+
+        for (int i = 0; i < RLEN; i++) {
+            if (i < mt_len) {
+                mt_buffer[i] = mt_template[i] == '_' ? mt_char : mt_template[i];
+            }
+            else {
+                mt_buffer[i] = '\0';
+            }
+        }
+
+        mt_buffer[RLEN - 1] = '\0'; // Just to be on the safe side : Add a final NULL
+
+        return mt_buffer;
+    }
+HEAD_END:
