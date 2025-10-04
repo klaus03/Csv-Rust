@@ -156,19 +156,12 @@ line_csv(char pt_sep, AV* fields)
 
 HEAD_BEGIN:
     static char var_utf8(pTHX_ SV* gu_scalar) {
-        if (!gu_scalar) {
-            return 0;
-        }
+        if (!gu_scalar)         { return 0; }
+        if (SvROK  (gu_scalar)) { return 0; } // It's a reference of some kind
+        if (!SvPOK (gu_scalar)) { return 0; }
+        if (!SvUTF8(gu_scalar)) { return 0; }
 
-        if (SvROK(gu_scalar)) { // It's a reference of some kind
-            return 0;
-        }
-
-        if (SvPOK(gu_scalar) && SvUTF8(gu_scalar)) {
-            return 1;
-        }
-
-        return 0;
+        return 1;
     }
 
     static ginf_t get_info(pTHX_ SV* gi_scalar, char* gi_buffer) {
@@ -183,63 +176,31 @@ HEAD_BEGIN:
 
             svtype gt_deref = SvTYPE(SvRV(gi_scalar)); // dereference
 
-            if (gt_deref == SVt_PVAV) { // It's an array reference
-                gi_result.type = 'A';
-            }
-            else if (gt_deref == SVt_PVHV) { // It's a hash reference
-                gi_result.type = 'H';
-            }
-            else if (gt_deref == SVt_PVCV) { // It's a code reference
-                gi_result.type = 'C';
-            }
-            else { // Some other kind of reference (glob, regex, etc.)
-                gi_result.type = 'G';
-            }
+            if      (gt_deref == SVt_PVAV) { gi_result.type = 'A'; } // It's an array reference
+            else if (gt_deref == SVt_PVHV) { gi_result.type = 'H'; } // It's a  hash  reference
+            else if (gt_deref == SVt_PVCV) { gi_result.type = 'C'; } // It's a  code  reference
+            else                           { gi_result.type = 'G'; } // other         reference (glob, regex, etc.)
 
             gi_result.mstr = make_text(gi_buffer, "#Ref(_)", gi_result.type);
             gi_result.mlen = strlen(gi_result.mstr);
         }
         else {
-            char no_svpv = 0;
+            if      (SvIOK(gi_scalar)) { gi_result.type = 'I'; } // Integer value
+            else if (SvNOK(gi_scalar)) { gi_result.type = 'D'; } // Double value
+            else if (SvPOK(gi_scalar)) { gi_result.type = 'S'; } // String value
+            else if (!SvOK(gi_scalar)) { gi_result.type = 'U'; } // undef
+            else                       { gi_result.type = 'Z'; } // unknown...
 
-            if (SvIOK(gi_scalar)) { // Integer value
-                gi_result.type = 'I';
-            }
-            else if (SvNOK(gi_scalar)) { // Double value
-                gi_result.type = 'D';
-            }
-            else if (SvPOK(gi_scalar)) { // String value
-                gi_result.type = 'S';
-
-                if (SvUTF8(gi_scalar)) {
-                    gi_result.uses_utf8 = 1;
-                }
-            }
-            else if (!SvOK(gi_scalar)) { // undef
-                gi_result.type = 'U';
-                no_svpv = 1;
-            }
-            else { // unknown...
-                gi_result.type = 'Z';
-                no_svpv = 1;
+            if (gi_result.type == 'S' && SvUTF8(gi_scalar)) {
+                gi_result.uses_utf8 = 1;
             }
 
-            if (no_svpv) {
+            if (gi_result.type == 'U' || gi_result.type == 'Z') {
                 gi_result.mstr = make_text(gi_buffer, "#Nul(_)", gi_result.type);
                 gi_result.mlen = strlen(gi_result.mstr);
             }
             else {
-                if (gi_result.uses_utf8) {
-                    gi_result.mstr = SvPVutf8_nolen(gi_scalar); // see also sv_utf8_upgrade(sv)
-                }
-                else {
-                    gi_result.mstr = SvPV_nolen(gi_scalar);
-                }
-
-                // https://perldoc.perl.org/perlguts
-                // You can get [...] the current length of the string stored in an SV with the following macros:
-                // STRLEN name_length = SvCUR(cv); /* in bytes */
-
+                gi_result.mstr = gi_result.uses_utf8 ? SvPVutf8_nolen(gi_scalar) : SvPV_nolen(gi_scalar);
                 gi_result.mlen = SvCUR(gi_scalar);
             }
         }
