@@ -32,6 +32,7 @@ HEAD_BEGIN:
     extern void rel_mlst(mlst_t);
 
     static char* make_text(char*, char*, char mt_char);
+    static char  appd_text(pTHX_ char**, size_t*, char*);
 HEAD_END:
 
 AV*
@@ -76,21 +77,10 @@ line_csv(char pt_sep, AV* fields)
             croak("ABORT-0030: line_csv(sep = %d) is not in range ASCII 1 .. 127", pt_sep);
         }
 
-        size_t rs_cap = TCAP;
-        size_t rs_len = 0;
-        char*  rs_str = malloc(rs_cap + 1); // +1 for the null-terminator
-
-        if (rs_str == NULL) {
-            croak("ABORT-0040: line_csv() -- Can't malloc(%d)", rs_cap + 1);
-        }
-
-        strcpy(rs_str, "");
-
         size_t sl_len = av_len(fields) + 1;
         sli_t* sl_arr = (sli_t*)malloc(sizeof(sli_t) * sl_len);
 
         if (sl_arr == NULL) {
-            free(rs_str);
             croak("ABORT-0050: line_csv() -- Can't malloc(%d) -- sizeof(sli_t) = %d", sl_len, sizeof(sli_t));
         }
 
@@ -107,42 +97,34 @@ line_csv(char pt_sep, AV* fields)
             }
         }
 
+        size_t rs_cap = TCAP;
+        char*  rs_str = malloc(rs_cap + 1); // +1 for the null-terminator
+
+        if (rs_str == NULL) {
+            croak("ABORT-0040: line_csv() -- Can't malloc(%d)", rs_cap + 1);
+        }
+
+        strcpy(rs_str, "");
+
         for (size_t i = 0; i < sl_len; i++) {
             SV* scalar = sl_arr[i].dat;
 
             char my_buffer[RLEN];
-
             ginf_t my_info = get_info(aTHX_ scalar, (char*)&my_buffer);
             mtxt_t my_txt  = get_mtxt(my_info.mlen, my_info.mstr, pt_sep, (i + 1 == sl_len ? 1 : 0));
 
-            char*  nw_str = my_txt.dat;
-            size_t nw_len = my_txt.len;
+            if (!appd_text(aTHX_ &rs_str, &rs_cap, my_txt.dat)) {
+                free(rs_str);
+                free(sl_arr);
+                rel_mtxt(my_txt);
 
-            if (rs_len + nw_len > rs_cap) {
-                char* ol_str = rs_str;
-
-                rs_cap = rs_len + nw_len + TCAP;
-                rs_str = malloc(rs_cap + 1); // +1 for the null-terminator
-
-                if (rs_str == NULL) {
-                    free(ol_str);
-                    free(sl_arr);
-                    rel_mtxt(my_txt);
-
-                    croak("ABORT-0060: line_csv() -- Can't malloc(%d)", rs_cap + 1);
-                }
-
-                memcpy(rs_str, ol_str, rs_len);
-                free(ol_str);
+                croak("ABORT-0060: line_csv() -- Can't malloc(%d)", rs_cap + 1);
             }
-
-            memcpy(rs_str + rs_len, nw_str, nw_len + 1); // +1 to copy the null-terminator
-            rs_len += nw_len;
 
             rel_mtxt(my_txt);
         }
 
-        RETVAL = newSVpv(rs_str, rs_len);
+        RETVAL = newSVpv(rs_str, strlen(rs_str));
 
         if (sl_utf8) {
             SvUTF8_on(RETVAL);
@@ -223,5 +205,23 @@ HEAD_BEGIN:
         mt_buffer[RLEN - 1] = '\0'; // Just to be on the safe side : Add a final NULL
 
         return mt_buffer;
+    }
+
+    static char appd_text(pTHX_ char** at_sbj_ptr, size_t* at_sbj_cap, char* at_add_str) {
+        size_t my_sbj_len = strlen(*at_sbj_ptr);
+        size_t my_add_len = strlen(at_add_str);
+
+        if (*at_sbj_cap < my_sbj_len + my_add_len) {
+            *at_sbj_cap = my_sbj_len + my_add_len + TCAP;
+
+            char* tm_str = malloc(aTHX_ (*at_sbj_cap + 1)); if (tm_str == NULL) { return 0; }
+            memcpy(tm_str, *at_sbj_ptr, my_sbj_len + 1);
+            free(aTHX_ *at_sbj_ptr);
+
+            *at_sbj_ptr = tm_str;
+        }
+
+        memcpy(*at_sbj_ptr + my_sbj_len, at_add_str, my_add_len + 1);
+        return 1;
     }
 HEAD_END:
