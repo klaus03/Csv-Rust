@@ -65,8 +65,8 @@ split_csv(char pt_sep, SV* scalar)
 
         AV* av = newAV();
         av_push(av, newSViv((int)my_lst.eno));
-        av_push(av, newRV_inc((SV*)my_AV));  // if you mean to take ownership of it
-        RETVAL = newRV_noinc((SV*)av);       // THIS is what Perl expects
+        av_push(av, newRV_noinc((SV*)my_AV));
+        RETVAL = newRV_noinc((SV*)av);
 
         rel_mlst(my_lst);
 
