@@ -35,7 +35,7 @@ HEAD_BEGIN:
     static char  appd_text(pTHX_ char**, size_t*, char*);
 HEAD_END:
 
-AV*
+SV*
 split_csv(char pt_sep, SV* scalar)
     CODE:
         if (pt_sep < 1 || pt_sep > 127) {
@@ -60,10 +60,13 @@ split_csv(char pt_sep, SV* scalar)
             av_push(my_AV, my_SV);
         }
 
-        RETVAL = newAV(); sv_2mortal((SV*)RETVAL);
- 
-        av_push(RETVAL, newSViv((int)my_lst.eno));
-        av_push(RETVAL, newRV_inc((SV*)my_AV));
+        // Alright, XS-land can feel like you're juggling knives blindfolded:
+        // ******************************************************************
+
+        AV* av = newAV();
+        av_push(av, newSViv((int)my_lst.eno));
+        av_push(av, newRV_inc((SV*)my_AV));  // if you mean to take ownership of it
+        RETVAL = newRV_noinc((SV*)av);       // THIS is what Perl expects
 
         rel_mlst(my_lst);
 
